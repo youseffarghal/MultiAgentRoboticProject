@@ -141,10 +141,10 @@ updateRigidityDisplay(rigidityText, A, Nmax);
         
         % Set formation control parameters
         params.dt = 0.05;           % time step
-        params.k = .5;             % control gain (reduced to allow trajectory forces to dominate)
+        params.k = .9;             % control gain (reduced to allow trajectory forces to dominate)
         params.max_iters = 2000;    % maximum iterations
         params.plot_every = 5;      % update plot every N iterations
-        
+
         % Run formation control (pass plotsol axes for visualization)
         [A, nodes] = formation(A, nodes, D, params, ax_plotsol);
     end

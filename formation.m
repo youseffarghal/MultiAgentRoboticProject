@@ -15,6 +15,8 @@ if nargin < 5 || isempty(params)
     params.plot_every = 10;
 end
 
+leaders = [1,5]
+
 N = size(A,1); % number of agents
 
 % Extract initial positions from nodes
@@ -36,18 +38,18 @@ for iter = 1:params.max_iters
     
     if iter < phase_iters 
         % Phase 1: Move right
-        vel_x = .5;
+        vel_x = .05;
         vel_y = 0;
         omega = 0;
     elseif iter < 2 * phase_iters
         % Phase 2: Rotate clockwise
         vel_x = 0;
         vel_y = 0;
-        omega = -0.15;
+        omega = -0.1;
     else
         % Phase 3: Move down
         vel_x = 0;
-        vel_y = -0.5;
+        vel_y = -0.05;
         omega = 0;
     end
     
@@ -66,6 +68,7 @@ for iter = 1:params.max_iters
             dist2 = rij' * rij;
             desired2 = D(i,j)^2;
             
+            %err = (rij -D(i,j)) / norm(rij + 1e-6); % avoid division by zero
             err = dist2 - desired2;
             
             % Gradient of 0.25*(dist2 - desired2)^2 wrt p_i
@@ -76,7 +79,7 @@ for iter = 1:params.max_iters
         end
         
         % --- leader input only for node 1 ---
-        if i == 1
+        if ismember(i, leaders)
             % translation
             ux(i) = ux(i) + vel_x;
             uy(i) = uy(i) + vel_y;
@@ -110,7 +113,7 @@ for iter = 1:params.max_iters
         end
 
         for i = 1:N
-            if i == 1
+            if ismember(i, leaders)
                 % Leader
                     plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
                         'MarkerSize', 10, 'MarkerFaceColor', 'green', 'MarkerEdgeColor', 'k');
