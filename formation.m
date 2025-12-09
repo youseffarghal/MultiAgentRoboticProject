@@ -1,4 +1,4 @@
-function [A, nodes] = formation(A, nodes, D, params, ax_plotsol)
+function [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol)
 % DISTANCE-BASED FORMATION CONTROL (gradient descent)
 % A      : adjacency matrix (NxN)
 % nodes  : cell array of NodeObj with fields .x, .y
@@ -19,7 +19,7 @@ FAULT_TYPES = ['none', 'non-compliant', "pulsing", 'malicious', 'byzantine'];
 FAULT_TYPE = 1;
 faulty_nodes = [];
 
-leaders = [1, 3, 5];
+leaders = leader_indices;
 
 N = size(A,1); % number of agents
 
