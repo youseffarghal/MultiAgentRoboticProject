@@ -15,15 +15,15 @@ if nargin < 4 || isempty(params)
     params.plot_every = 10;
 end
 
-if nargin < 5
+if nargin < 6
     ax_plotsol = [];
 end
 
-if nargin < 6
+if nargin < 7
     vidObj = [];   % no recording by default
 end
 
-FAULT_TYPES = ['none', 'non-compliant', "pulsing", 'malicious', 'byzantine'];
+FAULT_TYPES = ["none", "non-compliant", "pulsing", "malicious", "byzantine"];
 FAULT_TYPE = 1;
 faulty_nodes = [];
 
@@ -50,18 +50,18 @@ for iter = 1:params.max_iters
     
     if iter < phase_iters 
         % Phase 1: Move right
-        vel_x = .75;
+        vel_x = .1;
         vel_y = 0;
         omega = 0;
     elseif iter < 2 * phase_iters
         % Phase 2: Rotate clockwise
         vel_x = 0;
         vel_y = 0;
-        omega = -0.25;
+        omega = -0.05;
     else
         % Phase 3: Move down
         vel_x = 0;
-        vel_y = -0.75;
+        vel_y = -0.1;
         omega = 0;
     end
     

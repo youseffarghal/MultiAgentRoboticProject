@@ -179,6 +179,8 @@ updateRigidityDisplay(rigidityText, A, Nmax);
         vidObj.FrameRate = 20;   % adjust as you like
         open(vidObj);
 
+        %A =
+
         % Run formation control (pass plotsol axes for visualization)
         [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol, vidObj);
 
