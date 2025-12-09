@@ -36,18 +36,18 @@ for iter = 1:params.max_iters
     
     if iter < phase_iters 
         % Phase 1: Move right
-        vel_x = .1;
+        vel_x = .5;
         vel_y = 0;
         omega = 0;
     elseif iter < 2 * phase_iters
         % Phase 2: Rotate clockwise
         vel_x = 0;
         vel_y = 0;
-        omega = -0.05;
+        omega = -0.15;
     else
         % Phase 3: Move down
         vel_x = 0;
-        vel_y = -0.1;
+        vel_y = -0.5;
         omega = 0;
     end
     
@@ -76,6 +76,7 @@ for iter = 1:params.max_iters
         end
         
         % --- leader input only for node 1 ---
+        if i == 1
             % translation
             ux(i) = ux(i) + vel_x;
             uy(i) = uy(i) + vel_y;
@@ -85,6 +86,7 @@ for iter = 1:params.max_iters
             ry = py(i) - cy;
             ux(i) = ux(i) - omega * ry;
             uy(i) = uy(i) + omega * rx;
+        end
     end
 
     % Euler update
@@ -97,31 +99,36 @@ for iter = 1:params.max_iters
         nodes{i}.y = py(i);
     end
 
-    if mod(iter, 100) == 0
-    fprintf('iter %d: p1 = (%.3f, %.3f)\n', iter, px(1), py(1));
-    end
-
     if mod(iter, params.plot_every) == 0
-    cla(ax_plotsol);
-    hold(ax_plotsol, 'on');
+        cla(ax_plotsol);
+        hold(ax_plotsol, 'on');
 
-    X_current = zeros(2, N);
-    for i = 1:N
-        X_current(1,i) = nodes{i}.x;
-        X_current(2,i) = nodes{i}.y;
-    end
+        X_current = zeros(2, N);
+        for i = 1:N
+            X_current(1,i) = nodes{i}.x;
+            X_current(2,i) = nodes{i}.y;
+        end
 
-    for i = 1:N
-        plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
-             'MarkerSize', 8, 'MarkerFaceColor', 'blue');
-        for j = i+1:N
-            if A(i,j) == 1
-                plot(ax_plotsol, [X_current(1,i), X_current(1,j)], ...
-                                  [X_current(2,i), X_current(2,j)], ...
-                                  'k-', 'LineWidth', 1.5);
+        for i = 1:N
+            if i == 1
+                % Leader
+                    plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
+                        'MarkerSize', 10, 'MarkerFaceColor', 'green', 'MarkerEdgeColor', 'k');
+            else
+                % Followers
+                    plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
+                        'MarkerSize', 8, 'MarkerFaceColor', 'blue', 'MarkerEdgeColor', 'k');
+            end
+
+            %Draw edges
+            for j = i+1:N
+                if A(i,j) == 1
+                    plot(ax_plotsol, [X_current(1,i), X_current(1,j)], ...
+                                    [X_current(2,i), X_current(2,j)], ...
+                                    'k-', 'LineWidth', 1.5);
+                end
             end
         end
-    end
 
     grid(ax_plotsol, 'on');
     axis(ax_plotsol, 'equal');
@@ -142,56 +149,6 @@ for iter = 1:params.max_iters
 
     title(ax_plotsol, sprintf('Formation Control - Iteration %d', iter));
     drawnow;
-end
-
-
-
-    %{
-    % -------- Visualization on plotsol axis --------
-    if ~isempty(ax_plotsol) && mod(iter, params.plot_every) == 0
-        cla(ax_plotsol);
-        hold(ax_plotsol, 'on');
-        
-        % Current positions
-        X_current = zeros(2, N);
-        for i = 1:N
-            X_current(1,i) = nodes{i}.x;
-            X_current(2,i) = nodes{i}.y;
-        end
-        
-        % Plot nodes and edges
-        for i = 1:N
-            plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
-                 'MarkerSize', 8, 'MarkerFaceColor', 'blue');
-            for j = i+1:N
-                if A(i,j) == 1
-                    plot(ax_plotsol, [X_current(1,i), X_current(1,j)], ...
-                                      [X_current(2,i), X_current(2,j)], ...
-                                      'k-', 'LineWidth', 1.5);
-                end
-            end
-        end
-        
-        grid(ax_plotsol, 'on');
-        axis(ax_plotsol, 'equal');
-        
-        % Center/zoom around centroid
-        cx_plot = mean(X_current(1,:));
-        cy_plot = mean(X_current(2,:));
-        r = max(sqrt((X_current(1,:) - cx_plot).^2 + ...
-                     (X_current(2,:) - cy_plot).^2));
-        if r <= 0 || ~isfinite(r)
-            r = 1.0;
-        end
-        margin = 1.8;
-        axis(ax_plotsol, [cx_plot - margin*r, cx_plot + margin*r, ...
-                          cy_plot - margin*r, cy_plot + margin*r]);
-        xlabel(ax_plotsol, 'X');
-        ylabel(ax_plotsol, 'Y');
-        title(ax_plotsol, sprintf('Formation Control - Iteration %d', iter));
-        drawnow;
     end
-    %}
 end
-
 end
