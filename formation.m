@@ -8,14 +8,18 @@ function [A, nodes] = formation(A, nodes, D, params, ax_plotsol)
 %
 % Returns updated A (unchanged) and nodes with updated positions.
 
-if nargin < 5 || isempty(params)
+if nargin < 4 || isempty(params)
     params.dt = 0.05;
     params.k = 1.0;
     params.max_iters = 1000;
     params.plot_every = 10;
 end
 
-leaders = [1,5]
+FAULT_TYPES = ['none', 'non-compliant', "pulsing", 'malicious', 'byzantine'];
+FAULT_TYPE = 1;
+faulty_nodes = [];
+
+leaders = [1, 3, 5];
 
 N = size(A,1); % number of agents
 
@@ -38,18 +42,18 @@ for iter = 1:params.max_iters
     
     if iter < phase_iters 
         % Phase 1: Move right
-        vel_x = .05;
+        vel_x = .15;
         vel_y = 0;
         omega = 0;
     elseif iter < 2 * phase_iters
         % Phase 2: Rotate clockwise
         vel_x = 0;
         vel_y = 0;
-        omega = -0.1;
+        omega = -0.05;
     else
         % Phase 3: Move down
         vel_x = 0;
-        vel_y = -0.05;
+        vel_y = -0.15;
         omega = 0;
     end
     
@@ -59,16 +63,26 @@ for iter = 1:params.max_iters
     
     % -------- Formation control + group motion --------
     for i = 1:N
+
+        if ismember(i, faulty_nodes) && FAULT_TYPES(FAULT_TYPE) == "non-compliant"
+            [ux(i), uy(i), ~] = fault_models(FAULT_TYPES(FAULT_TYPE), [px(i); py(i)]);
+            continue;
+        end
+
         neighbors = find(A(i,:) == 1);
         pos_i = [px(i); py(i)];
         
         for j = neighbors
             pos_j = [px(j); py(j)];
+
+            if ismember(j, faulty_nodes) && (FAULT_TYPES(FAULT_TYPE) == "malicious" || FAULT_TYPES(FAULT_TYPE) == "byzantine")
+                [~, ~, pos_j] = fault_models(FAULT_TYPES(FAULT_TYPE), pos_j);
+            end
+
             rij = pos_i - pos_j;
             dist2 = rij' * rij;
             desired2 = D(i,j)^2;
             
-            %err = (rij -D(i,j)) / norm(rij + 1e-6); % avoid division by zero
             err = dist2 - desired2;
             
             % Gradient of 0.25*(dist2 - desired2)^2 wrt p_i
@@ -114,11 +128,15 @@ for iter = 1:params.max_iters
 
         for i = 1:N
             if ismember(i, leaders)
-                % Leader
+                % Leader = green
                     plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
                         'MarkerSize', 10, 'MarkerFaceColor', 'green', 'MarkerEdgeColor', 'k');
+            elseif ismember(i, faulty_nodes)
+                % Faulty = red
+                    plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
+                        'MarkerSize', 9, 'MarkerFaceColor', 'red', 'MarkerEdgeColor', 'k');
             else
-                % Followers
+                % Followers = blue
                     plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
                         'MarkerSize', 8, 'MarkerFaceColor', 'blue', 'MarkerEdgeColor', 'k');
             end
