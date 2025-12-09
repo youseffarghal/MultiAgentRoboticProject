@@ -16,6 +16,8 @@ A = zeros(Nmax); % Adjacency matrix for the graph
 
 coords = zeros(Nmax, 2); % Coordinates for each node
 
+leader_indices = [];   % Stores leader nodes inputed by user in rule 0
+
 % Generate circular coordinates for the nodes
 theta = linspace(0, 2*pi, Nmax + 1)';
 coords(:, 1) = cos(theta(1:end-1)); % X-coordinates
@@ -128,6 +130,33 @@ updateRigidityDisplay(rigidityText, A, Nmax);
     end
 
     function cb_formation()
+        % Ask user for leader node IDs
+        prompt = sprintf("Enter leader node IDs (1 to %d), separated by spaces or commas:", Nmax);
+        choice = inputdlg(prompt, "Choose Leader Nodes", 1, {"1"});
+
+        if isempty(choice)
+            return;
+        end
+
+        % Parse input string into numeric array
+        leader_str = choice{1};
+        leader_indices = str2num(leader_str);  %#ok<ST2NM>
+
+        % ---- Validation ----
+        if isempty(leader_indices)
+            errordlg("Please enter at least one valid node ID.");
+            return;
+        end
+
+        % Must be in range
+        if any(leader_indices < 1) || any(leader_indices > Nmax)
+            errordlg("All IDs must be between 1 and " + Nmax + ".");
+            return;
+        end
+
+        % Remove duplicates (and warn user if you want)
+        leader_indices = unique(leader_indices);
+
         % Create a separate figure for plotsol visualization
         [X,n,N]= load_network(A, nodes);
         fig_formation = figure('Name', 'Formation Control - Network Visualization', ...
@@ -141,12 +170,19 @@ updateRigidityDisplay(rigidityText, A, Nmax);
         
         % Set formation control parameters
         params.dt = 0.05;           % time step
-        params.k = .9;             % control gain (reduced to allow trajectory forces to dominate)
+        params.k = .5;             % control gain (reduced to allow trajectory forces to dominate)
         params.max_iters = 2000;    % maximum iterations
         params.plot_every = 5;      % update plot every N iterations
 
+        % --- Create video writer ---
+        vidObj = VideoWriter('formation_control.mp4', 'MPEG-4');  % or .avi with default
+        vidObj.FrameRate = 20;   % adjust as you like
+        open(vidObj);
+
         % Run formation control (pass plotsol axes for visualization)
-        [A, nodes] = formation(A, nodes, D, params, ax_plotsol);
+        [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol, vidObj);
+
+        close(vidObj);
     end
 
 end %hennesburg_gui

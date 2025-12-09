@@ -1,4 +1,4 @@
-function [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol)
+function [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol, vidObj)
 % DISTANCE-BASED FORMATION CONTROL (gradient descent)
 % A      : adjacency matrix (NxN)
 % nodes  : cell array of NodeObj with fields .x, .y
@@ -13,6 +13,14 @@ if nargin < 4 || isempty(params)
     params.k = 1.0;
     params.max_iters = 1000;
     params.plot_every = 10;
+end
+
+if nargin < 5
+    ax_plotsol = [];
+end
+
+if nargin < 6
+    vidObj = [];   % no recording by default
 end
 
 FAULT_TYPES = ['none', 'non-compliant', "pulsing", 'malicious', 'byzantine'];
@@ -42,18 +50,18 @@ for iter = 1:params.max_iters
     
     if iter < phase_iters 
         % Phase 1: Move right
-        vel_x = .15;
+        vel_x = .75;
         vel_y = 0;
         omega = 0;
     elseif iter < 2 * phase_iters
         % Phase 2: Rotate clockwise
         vel_x = 0;
         vel_y = 0;
-        omega = -0.05;
+        omega = -0.25;
     else
         % Phase 3: Move down
         vel_x = 0;
-        vel_y = -0.15;
+        vel_y = -0.75;
         omega = 0;
     end
     
@@ -170,6 +178,15 @@ for iter = 1:params.max_iters
 
     title(ax_plotsol, sprintf('Formation Control - Iteration %d', iter));
     drawnow;
+
+    % --- Recording section ---
+    if ~isempty(vidObj)
+        % Get the figure that owns this axes
+        fig = ancestor(ax_plotsol, 'figure');
+        frame = getframe(fig);      % capture current figure as a frame
+        writeVideo(vidObj, frame);  % append to video
+    end
+
     end
 end
 end

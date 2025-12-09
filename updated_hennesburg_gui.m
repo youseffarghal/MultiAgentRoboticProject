@@ -153,8 +153,15 @@ updateRigidityDisplay(rigidityText, A, Nmax);
         params.max_iters = 2000;    % maximum iterations
         params.plot_every = 5;      % update plot every N iterations
 
+         % --- Create video writer ---
+         vidObj = VideoWriter('formation_control.mp4', 'MPEG-4');  % or .avi with default
+         vidObj.FrameRate = 20;   % adjust as you like
+         open(vidObj);
+
         % Run formation control (pass plotsol axes for visualization)
-        [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol);
+        [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol,  vidObj);
+
+        close(vidObj);
     end
 
 end %hennesburg_gui
