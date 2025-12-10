@@ -1,4 +1,4 @@
-function [A, nodes] = formation(A, nodes, D, params, ax_plotsol)
+function [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol, vidObj)
 % DISTANCE-BASED FORMATION CONTROL (gradient descent)
 % A      : adjacency matrix (NxN)
 % nodes  : cell array of NodeObj with fields .x, .y
@@ -8,7 +8,7 @@ function [A, nodes] = formation(A, nodes, D, params, ax_plotsol)
 %
 % Returns updated A (unchanged) and nodes with updated positions.
 
-if nargin < 5 || isempty(params)
+if nargin < 4 || isempty(params)
     params.dt = 0.05;
     params.k = 1.0;
     params.max_iters = 1000;
@@ -18,6 +18,16 @@ end
 if nargin < 6
     ax_plotsol = [];
 end
+
+if nargin < 7
+    vidObj = [];   % no recording by default
+end
+
+FAULT_TYPES = ["none", "non-compliant", "pulsing", "malicious", "byzantine"];
+FAULT_TYPE = 1;
+faulty_nodes = [];
+
+leaders = leader_indices;
 
 N = size(A,1); % number of agents
 
@@ -38,20 +48,20 @@ for iter = 1:params.max_iters
     % -------- Rigid-body trajectory (translation + rotation) --------
     phase_iters = params.max_iters / 3;
     
-    if iter < phase_iters
+    if iter < phase_iters 
         % Phase 1: Move right
-        vel_x = 0.5;
+        vel_x = .1;
         vel_y = 0;
         omega = 0;
     elseif iter < 2 * phase_iters
         % Phase 2: Rotate clockwise
         vel_x = 0;
         vel_y = 0;
-        omega = -0.15;
+        omega = -0.05;
     else
         % Phase 3: Move down
         vel_x = 0;
-        vel_y = -0.5;
+        vel_y = -0.1;
         omega = 0;
     end
     
@@ -61,11 +71,22 @@ for iter = 1:params.max_iters
     
     % -------- Formation control + group motion --------
     for i = 1:N
+
+        if ismember(i, faulty_nodes) && FAULT_TYPES(FAULT_TYPE) == "non-compliant"
+            [ux(i), uy(i), ~] = fault_models(FAULT_TYPES(FAULT_TYPE), [px(i); py(i)]);
+            continue;
+        end
+
         neighbors = find(A(i,:) == 1);
         pos_i = [px(i); py(i)];
         
         for j = neighbors
             pos_j = [px(j); py(j)];
+
+            if ismember(j, faulty_nodes) && (FAULT_TYPES(FAULT_TYPE) == "malicious" || FAULT_TYPES(FAULT_TYPE) == "byzantine")
+                [~, ~, pos_j] = fault_models(FAULT_TYPES(FAULT_TYPE), pos_j);
+            end
+
             rij = pos_i - pos_j;
             dist2 = rij' * rij;
             desired2 = D(i,j)^2;
@@ -79,15 +100,18 @@ for iter = 1:params.max_iters
             uy(i) = uy(i) - params.k * grad(2);
         end
         
-        % Add rigid-body translation
-        ux(i) = ux(i) + vel_x;
-        uy(i) = uy(i) + vel_y;
-        
-        % Add rigid-body rotation around centroid
-        rx = px(i) - cx;
-        ry = py(i) - cy;
-        ux(i) = ux(i) - omega * ry;
-        uy(i) = uy(i) + omega * rx;
+        % --- leader input only for node 1 ---
+        if ismember(i, leaders)
+            % translation
+            ux(i) = ux(i) + vel_x;
+            uy(i) = uy(i) + vel_y;
+
+            % (optional) rotation about centroid – also only applied to node 1
+            rx = px(i) - cx;
+            ry = py(i) - cy;
+            ux(i) = ux(i) - omega * ry;
+            uy(i) = uy(i) + omega * rx;
+        end
     end
 
     % Euler update
@@ -100,50 +124,69 @@ for iter = 1:params.max_iters
         nodes{i}.y = py(i);
     end
 
-    % -------- Visualization on plotsol axis --------
-    if ~isempty(ax_plotsol) && mod(iter, params.plot_every) == 0
+    if mod(iter, params.plot_every) == 0
         cla(ax_plotsol);
         hold(ax_plotsol, 'on');
-        
-        % Current positions
+
         X_current = zeros(2, N);
         for i = 1:N
             X_current(1,i) = nodes{i}.x;
             X_current(2,i) = nodes{i}.y;
         end
-        
-        % Plot nodes and edges
+
         for i = 1:N
-            plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
-                 'MarkerSize', 8, 'MarkerFaceColor', 'blue');
+            if ismember(i, leaders)
+                % Leader = green
+                    plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
+                        'MarkerSize', 10, 'MarkerFaceColor', 'green', 'MarkerEdgeColor', 'k');
+            elseif ismember(i, faulty_nodes)
+                % Faulty = red
+                    plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
+                        'MarkerSize', 9, 'MarkerFaceColor', 'red', 'MarkerEdgeColor', 'k');
+            else
+                % Followers = blue
+                    plot(ax_plotsol, X_current(1,i), X_current(2,i), 'o', ...
+                        'MarkerSize', 8, 'MarkerFaceColor', 'blue', 'MarkerEdgeColor', 'k');
+            end
+
+            %Draw edges
             for j = i+1:N
                 if A(i,j) == 1
                     plot(ax_plotsol, [X_current(1,i), X_current(1,j)], ...
-                                      [X_current(2,i), X_current(2,j)], ...
-                                      'k-', 'LineWidth', 1.5);
+                                    [X_current(2,i), X_current(2,j)], ...
+                                    'k-', 'LineWidth', 1.5);
                 end
             end
         end
-        
-        grid(ax_plotsol, 'on');
-        axis(ax_plotsol, 'equal');
-        
-        % Center/zoom around centroid
-        cx_plot = mean(X_current(1,:));
-        cy_plot = mean(X_current(2,:));
-        r = max(sqrt((X_current(1,:) - cx_plot).^2 + ...
-                     (X_current(2,:) - cy_plot).^2));
-        if r <= 0 || ~isfinite(r)
-            r = 1.0;
-        end
-        margin = 1.8;
-        axis(ax_plotsol, [cx_plot - margin*r, cx_plot + margin*r, ...
-                          cy_plot - margin*r, cy_plot + margin*r]);
-        xlabel(ax_plotsol, 'X');
-        ylabel(ax_plotsol, 'Y');
-        title(ax_plotsol, sprintf('Formation Control - Iteration %d', iter));
-        drawnow;
+
+    grid(ax_plotsol, 'on');
+    axis(ax_plotsol, 'equal');
+
+    % --- Dynamic axis tracking ---
+    cx_plot = mean(X_current(1,:));
+    cy_plot = mean(X_current(2,:));
+
+    r = max(sqrt((X_current(1,:) - cx_plot).^2 + ...
+             (X_current(2,:) - cy_plot).^2));
+    if r <= 0 || ~isfinite(r)
+    r = 1;
+    end
+
+    margin = 1.8;
+    axis(ax_plotsol, [cx_plot - margin*r, cx_plot + margin*r, ...
+                    cy_plot - margin*r, cy_plot + margin*r]);
+
+    title(ax_plotsol, sprintf('Formation Control - Iteration %d', iter));
+    drawnow;
+
+    % --- Recording section ---
+    if ~isempty(vidObj)
+        % Get the figure that owns this axes
+        fig = ancestor(ax_plotsol, 'figure');
+        frame = getframe(fig);      % capture current figure as a frame
+        writeVideo(vidObj, frame);  % append to video
+    end
+
     end
 end
-
 end

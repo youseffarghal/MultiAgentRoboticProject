@@ -1,4 +1,4 @@
-function hennesburg_gui()
+function updated_hennesburg_gui()
 % Destroy all figure
 close all;
 
@@ -37,16 +37,16 @@ ax = axes('Parent',fig,'Position',[0.05 0.1 0.6 0.85]);
 hold(ax,'on');
 
 % Buttons
-btn_rule0 = uicontrol(fig,'Style','pushbutton','String','Rule 0 (Start)', ...
+btn_rule0 = uicontrol(fig,'Style','pushbutton','String','Updated Rule 0 (Start)', ...
     'Units','normalized','Position',[0.7 0.85 0.25 0.08], ...
     'Callback', @(~,~)cb_rule0());
 
-btn_rule1 = uicontrol(fig,'Style','pushbutton','String','Rule 1 (Addition)',...
+btn_rule1 = uicontrol(fig,'Style','pushbutton','String','Updated Rule 1 (Addition)',...
     'Units','normalized','Position',[0.7 0.75 0.25 0.08],...
     'Enable','off', ...      % DISABLED UNTIL RULE 0
     'Callback',@(~,~)cb_rule1());
 
-btn_rule2 = uicontrol(fig,'Style','pushbutton','String','Rule 2 (Edge Splitting)',...
+btn_rule2 = uicontrol(fig,'Style','pushbutton','String','Updated Rule 2 (Edge Splitting)',...
     'Units','normalized','Position',[0.7 0.65 0.25 0.08],...
     'Enable','off', ...      % DISABLED UNTIL RULE 0
     'Callback',@(~,~)cb_rule2());
@@ -70,44 +70,50 @@ updateRigidityDisplay(rigidityText, A, Nmax);
 
 % GUI CALLBACKS
     function cb_rule0()
-        % Ask user to pick a node ID
-        choice = inputdlg("Enter the start node ID (1 to " + Nmax + "):", ...
-            "Choose Start Node", 1, {"1"});
+        % Ask user to pick 3 leader node IDs
+        prompt = sprintf("Enter 3 leader node IDs (1 to %d), separated by spaces or commas:", Nmax);
+        choice = inputdlg(prompt, "Choose Leader Nodes", 1, {"3 5 8"});
         if isempty(choice)
             return;
         end
 
-        start_node = str2double(choice{1});
-        if isnan(start_node) || start_node < 1 || start_node > Nmax
-            errordlg("Invalid node ID selected.");
+        % Parse the list into numeric indices
+        leader_str = choice{1};
+        leader_indices = str2num(leader_str); %#ok<ST2NM>  % handles "1 2 3" or "1,2,3"
+
+        % Validate input: must be 3 distinct integers in range
+        if isempty(leader_indices) || numel(leader_indices) ~= 3 || ...
+        any(~isfinite(leader_indices)) || any(leader_indices < 1) || ...
+        any(leader_indices > Nmax) || numel(unique(leader_indices)) ~= 3
+            errordlg("Please enter 3 distinct node IDs between 1 and " + Nmax + ".");
             return;
         end
 
-        % Apply Rule 0
-        [A, nodes] = applyRule0(start_node, A, nodes);
+        % Apply Rule 0 with leader list
+        [A, nodes] = updated_applyRule0(leader_indices, A, nodes);
 
-         % ---- ENABLE remaining buttons ----
+        % ---- ENABLE remaining buttons ----
         set(btn_rule1, 'Enable', 'on');
         set(btn_rule2, 'Enable', 'on');
         set(btn_auto,  'Enable', 'on');
-    
+
         % ---- Disable Rule 0 so it cannot be used again ----
         set(btn_rule0, 'Enable', 'off');
-
 
         % Update UI
         updatePlot(ax, A, nodes);
         updateRigidityDisplay(rigidityText, A, Nmax);
     end
 
+
     function cb_rule1()
-        [A, nodes] = applyRule1(A, nodes);
+        [A, nodes] = updated_applyRule1(A, nodes, leader_indices);
         updatePlot(ax, A, nodes);
         updateRigidityDisplay(rigidityText, A, Nmax);
     end
 
     function cb_rule2()
-        [A, nodes] = applyRule2(A, nodes);
+        [A, nodes] = updated_applyRule2(A, nodes, leader_indices);
         updatePlot(ax, A, nodes);
         updateRigidityDisplay(rigidityText, A, Nmax);
     end
@@ -120,7 +126,7 @@ updateRigidityDisplay(rigidityText, A, Nmax);
         lamanRequired = 2*Nmax - 3;
         
         while edges < lamanRequired
-            if rand() < 0.3
+            if rand() < 0.5
                 cb_rule1();
             else
                 cb_rule2();
@@ -130,33 +136,6 @@ updateRigidityDisplay(rigidityText, A, Nmax);
     end
 
     function cb_formation()
-        % Ask user for leader node IDs
-        prompt = sprintf("Enter leader node IDs (1 to %d), separated by spaces or commas:", Nmax);
-        choice = inputdlg(prompt, "Choose Leader Nodes", 1, {"1"});
-
-        if isempty(choice)
-            return;
-        end
-
-        % Parse input string into numeric array
-        leader_str = choice{1};
-        leader_indices = str2num(leader_str);  %#ok<ST2NM>
-
-        % ---- Validation ----
-        if isempty(leader_indices)
-            errordlg("Please enter at least one valid node ID.");
-            return;
-        end
-
-        % Must be in range
-        if any(leader_indices < 1) || any(leader_indices > Nmax)
-            errordlg("All IDs must be between 1 and " + Nmax + ".");
-            return;
-        end
-
-        % Remove duplicates (and warn user if you want)
-        leader_indices = unique(leader_indices);
-
         % Create a separate figure for plotsol visualization
         [X,n,N]= load_network(A, nodes);
         fig_formation = figure('Name', 'Formation Control - Network Visualization', ...
@@ -174,15 +153,13 @@ updateRigidityDisplay(rigidityText, A, Nmax);
         params.max_iters = 2000;    % maximum iterations
         params.plot_every = 5;      % update plot every N iterations
 
-        % --- Create video writer ---
-        vidObj = VideoWriter('formation_control.mp4', 'MPEG-4');  % or .avi with default
-        vidObj.FrameRate = 20;   % adjust as you like
-        open(vidObj);
-
-        %A =
+         % --- Create video writer ---
+         vidObj = VideoWriter('formation_control.mp4', 'MPEG-4');  % or .avi with default
+         vidObj.FrameRate = 20;   % adjust as you like
+         open(vidObj);
 
         % Run formation control (pass plotsol axes for visualization)
-        [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol, vidObj);
+        [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol,  vidObj);
 
         close(vidObj);
     end
