@@ -1,0 +1,167 @@
+function updated_hennesburg_gui()
+% Destroy all figure
+close all;
+
+% USER INPUT
+Nmax = inputdlg("Enter the number of nodes:", ...
+    "Number of Nodes", 1, {"8"});
+Nmax = str2double(Nmax{1});
+
+if Nmax < 0
+    error("Number need to be greater than 0");
+end
+
+% INITIALIZE GRAPHS
+A = zeros(Nmax); % Adjacency matrix for the graph
+
+coords = zeros(Nmax, 2); % Coordinates for each node
+
+leader_indices = [];   % Stores leader nodes inputed by user in rule 0
+
+% Generate circular coordinates for the nodes
+theta = linspace(0, 2*pi, Nmax + 1)';
+coords(:, 1) = cos(theta(1:end-1)); % X-coordinates
+coords(:, 2) = sin(theta(1:end-1)); % Y-coordinates
+
+%Initialize nodes array size Nmax of NodeObj
+nodes = cell(Nmax, 1); % Initialize nodes array to hold NodeObj
+
+for i = 1:Nmax
+    nodes{i} = NodeObj(i,coords(i,1),coords(i,2),'o',[0 0 1]);
+end
+
+% BUILD GUI
+fig = figure('Name','Hennesburg Grammar GUI',...
+    'Position',[200 100 900 600]);
+ax = axes('Parent',fig,'Position',[0.05 0.1 0.6 0.85]);
+hold(ax,'on');
+
+% Buttons
+btn_rule0 = uicontrol(fig,'Style','pushbutton','String','Updated Rule 0 (Start)', ...
+    'Units','normalized','Position',[0.7 0.85 0.25 0.08], ...
+    'Callback', @(~,~)cb_rule0());
+
+btn_rule1 = uicontrol(fig,'Style','pushbutton','String','Updated Rule 1 (Addition)',...
+    'Units','normalized','Position',[0.7 0.75 0.25 0.08],...
+    'Enable','off', ...      % DISABLED UNTIL RULE 0
+    'Callback',@(~,~)cb_rule1());
+
+btn_rule2 = uicontrol(fig,'Style','pushbutton','String','Updated Rule 2 (Edge Splitting)',...
+    'Units','normalized','Position',[0.7 0.65 0.25 0.08],...
+    'Enable','off', ...      % DISABLED UNTIL RULE 0
+    'Callback',@(~,~)cb_rule2());
+
+btn_auto = uicontrol(fig,'Style','pushbutton','String','Auto Run',...
+    'Units','normalized','Position',[0.7 0.55 0.25 0.08],...
+    'Enable','off', ...      % DISABLED UNTIL RULE 0
+    'Callback',@(~,~)cb_auto());
+
+uicontrol(fig,'Style','pushbutton','String','Run Formation Control',...
+    'Units','normalized','Position',[0.7 0.45 0.25 0.08],...
+    'Callback',@(~,~)cb_formation());
+
+rigidityText = uicontrol(fig,'Style','text',...
+    'Units','normalized','Position',[0.7 0.05 0.25 0.4],...
+    'FontSize',12,'HorizontalAlignment','left');
+
+% Initial plot and rigidity
+updatePlot(ax, A, nodes);
+updateRigidityDisplay(rigidityText, A, Nmax);
+
+% GUI CALLBACKS
+    function cb_rule0()
+        % Ask user to pick 3 leader node IDs
+        prompt = sprintf("Enter 3 leader node IDs (1 to %d), separated by spaces or commas:", Nmax);
+        choice = inputdlg(prompt, "Choose Leader Nodes", 1, {"3 5 8"});
+        if isempty(choice)
+            return;
+        end
+
+        % Parse the list into numeric indices
+        leader_str = choice{1};
+        leader_indices = str2num(leader_str); %#ok<ST2NM>  % handles "1 2 3" or "1,2,3"
+
+        % Validate input: must be 3 distinct integers in range
+        if isempty(leader_indices) || numel(leader_indices) ~= 3 || ...
+        any(~isfinite(leader_indices)) || any(leader_indices < 1) || ...
+        any(leader_indices > Nmax) || numel(unique(leader_indices)) ~= 3
+            errordlg("Please enter 3 distinct node IDs between 1 and " + Nmax + ".");
+            return;
+        end
+
+        % Apply Rule 0 with leader list
+        [A, nodes] = updated_applyRule0(leader_indices, A, nodes);
+
+        % ---- ENABLE remaining buttons ----
+        set(btn_rule1, 'Enable', 'on');
+        set(btn_rule2, 'Enable', 'on');
+        set(btn_auto,  'Enable', 'on');
+
+        % ---- Disable Rule 0 so it cannot be used again ----
+        set(btn_rule0, 'Enable', 'off');
+
+        % Update UI
+        updatePlot(ax, A, nodes);
+        updateRigidityDisplay(rigidityText, A, Nmax);
+    end
+
+
+    function cb_rule1()
+        [A, nodes] = updated_applyRule1(A, nodes, leader_indices);
+        updatePlot(ax, A, nodes);
+        updateRigidityDisplay(rigidityText, A, Nmax);
+    end
+
+    function cb_rule2()
+        [A, nodes] = updated_applyRule2(A, nodes, leader_indices);
+        updatePlot(ax, A, nodes);
+        updateRigidityDisplay(rigidityText, A, Nmax);
+    end
+
+    function cb_auto()
+        Aactive = A(1:Nmax, 1:Nmax);
+
+        edges = nnz(Aactive) / 2;
+
+        lamanRequired = 2*Nmax - 3;
+        
+        while edges < lamanRequired
+            if rand() < 0.5
+                cb_rule1();
+            else
+                cb_rule2();
+            end
+            pause(0.5);
+        end
+    end
+
+    function cb_formation()
+        % Create a separate figure for plotsol visualization
+        [X,n,N]= load_network(A, nodes);
+        fig_formation = figure('Name', 'Formation Control - Network Visualization', ...
+            'Position', [1150 100 600 600]);
+        ax_plotsol = axes('Parent', fig_formation);
+        hold(ax_plotsol, 'on');
+        plotsol(X, N, A, 2.0);
+        
+        % Compute desired distances from current shape
+        D = computeDesiredDistances(A, nodes);
+        
+        % Set formation control parameters
+        params.dt = 0.05;           % time step
+        params.k = .5;             % control gain (reduced to allow trajectory forces to dominate)
+        params.max_iters = 2000;    % maximum iterations
+        params.plot_every = 5;      % update plot every N iterations
+
+         % --- Create video writer ---
+         vidObj = VideoWriter('formation_control.mp4', 'MPEG-4');  % or .avi with default
+         vidObj.FrameRate = 20;   % adjust as you like
+         open(vidObj);
+
+        % Run formation control (pass plotsol axes for visualization)
+        [A, nodes] = formation(A, nodes, D, params, leader_indices, ax_plotsol,  vidObj);
+
+        close(vidObj);
+    end
+
+end %hennesburg_gui
